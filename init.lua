@@ -161,6 +161,8 @@ vim.opt.scrolloff = 10
 vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>')
 
 -- *********** config hecha por el cera y solo el cera **************
+vim.opt.guicursor = "n-v-c:block,i:block,r-cr:block,sm:block"
+
 vim.keymap.set('i', 'jj', '<Esc>')
 
 vim.keymap.set('x', '<leader>p', '"_dp')
@@ -175,6 +177,10 @@ vim.keymap.set('n', '<C-u>', '<C-u>zz')
 vim.keymap.set('n', '<leader>W', ':w<Enter>', { desc = '[w]rite file' })
 vim.keymap.set('n', '<leader>p', ':bprev<Enter>', { desc = '[p]revious buffer' })
 vim.keymap.set('n', '<leader>n', ':bnext<Enter>', { desc = '[n]ext buffer' })
+
+vim.keymap.set("n", "[c", function()
+  require("treesitter-context").go_to_context(vim.v.count1)
+end, { silent = true })
 
 vim.opt.clipboard = 'unnamedplus'
 
@@ -629,7 +635,13 @@ require('lazy').setup({
       local servers = {
         -- clangd = {},
         gopls = {},
-        -- pyright = {},
+        pyright = {
+          settings = {
+            python = {
+              pythonPath = '/home/gerardo/Documents/projects/asteroids/venv/bin/python'
+            }
+          }
+        },
         -- rust_analyzer = {},
         -- ... etc. See `:help lspconfig-all` for a list of all the pre-configured LSPs
         --
@@ -674,6 +686,39 @@ require('lazy').setup({
 
       require('mason-lspconfig').setup {
         handlers = {
+          ["tailwindcss"] = function()
+            require('lspconfig').tailwindcss.setup {
+              -- 👇 treat templ files as html
+              init_options = {
+                userLanguages = {
+                  templ = "html",
+                },
+              },
+              filetypes = {
+                'templ', -- 👈 ADD THIS
+                'html',
+                'css',
+                'javascript',
+                'javascriptreact',
+                'typescript',
+                'typescriptreact',
+                'vue',
+                'svelte',
+              },
+              settings = {
+                tailwindCSS = {
+                  experimental = {
+                    classRegex = {
+                      { 'class="([^"]*)"' },
+                      { 'className="([^"]*)"' },
+                      { 'class:`([^`]*)`' },
+                      { 'class=\\{`([^`]*)`\\}' },
+                    },
+                  },
+                },
+              },
+            }
+          end,
           function(server_name)
             local server = servers[server_name] or {}
             -- This handles overriding only values explicitly passed
@@ -689,6 +734,31 @@ require('lazy').setup({
         cmd = { 'gopls' },
         filetypes = { 'go', 'gomod', 'gowork', 'gotmpl' },
         root_dir = util.root_pattern('go.work', 'go.mod', '.git'),
+        on_attach = function(client, bufnr)
+          -- Autoformat on save
+          vim.api.nvim_create_autocmd("BufWritePre", {
+            buffer = bufnr,
+            callback = function()
+              local params = vim.lsp.util.make_range_params()
+              params.context = { only = { "source.organizeImports" } }
+              -- buf_request_sync defaults to a 1000ms timeout. Depending on your
+              -- machine and codebase, you may want longer. Add an additional
+              -- argument after params if you find that you have to write the file
+              -- twice for changes to be saved.
+              -- E.g., vim.lsp.buf_request_sync(0, "textDocument/codeAction", params, 3000)
+              local result = vim.lsp.buf_request_sync(0, "textDocument/codeAction", params)
+              for cid, res in pairs(result or {}) do
+                for _, r in pairs(res.result or {}) do
+                  if r.edit then
+                    local enc = (vim.lsp.get_client_by_id(cid) or {}).offset_encoding or "utf-16"
+                    vim.lsp.util.apply_workspace_edit(r.edit, enc)
+                  end
+                end
+              end
+              vim.lsp.buf.format({ async = false })
+            end
+          })
+        end,
         settings = {
           gopls = {
             completeUnimported = true,
@@ -718,7 +788,27 @@ require('lazy').setup({
     ft = 'go',
     opts = function()
       local null_ls = require 'null-ls'
+      local helpers = require 'null-ls.helpers'
+
       local augroup = vim.api.nvim_create_augroup('LspFormatting', {})
+
+
+      null_ls.builtins.formatting.templ_fmt = helpers.make_builtin({
+        name = "templ",
+        meta = {
+          url = "https://templ.guide",
+          description = "Formatter for .templ files using `templ fmt`.",
+        },
+        method = null_ls.methods.FORMATTING,
+        filetypes = { "templ" },
+        generator_opts = {
+          command = "templ",
+          args = { "fmt", "$FILENAME" },
+          to_temp_file = true,
+          from_temp_file = true,
+        },
+        factory = helpers.formatter_factory,
+      })
 
       null_ls.setup {
         sources = {
@@ -727,6 +817,7 @@ require('lazy').setup({
             args = { '-rm-unused', '*.go' },
           }),
           null_ls.builtins.formatting.golines,
+          null_ls.builtins.formatting.templ_fmt,
         },
         on_attach = function(client, bufnr)
           if client.supports_method 'textDocument/formatting' then
@@ -904,6 +995,7 @@ require('lazy').setup({
     'catppuccin/nvim',
     'folke/tokyonight.nvim',
     'sho-87/kanagawa-paper.nvim',
+    "rose-pine/neovim",
   },
   { -- You can easily change to a different colorscheme.
     -- Change the name of the colorscheme plugin below, and then
@@ -917,6 +1009,41 @@ require('lazy').setup({
       -- Load the colorscheme here.
       -- Like many other themes, this one has different styles, and you could load
       -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
+      require("rose-pine").setup({
+        styles = {
+          transparency = true,
+        },
+
+        palette = {
+          -- Override the builtin palette per variant
+          -- moon = {
+          --     base = '#18191a',
+          --     overlay = '#363738',
+          -- },
+        },
+
+        -- NOTE: Highlight groups are extended (merged) by default. Disable this
+        -- per group via `inherit = false`
+        highlight_groups = {
+          -- Comment = { fg = "foam" },
+          -- StatusLine = { fg = "love", bg = "love", blend = 15 },
+          -- VertSplit = { fg = "muted", bg = "muted" },
+          -- Visual = { fg = "base", bg = "text", inherit = false },
+        },
+
+        before_highlight = function(group, highlight, palette)
+          -- Disable all undercurls
+          -- if highlight.undercurl then
+          --     highlight.undercurl = false
+          -- end
+          --
+          -- Change palette colour
+          -- if highlight.fg == palette.pine then
+          --     highlight.fg = palette.foam
+          -- end
+        end,
+      })
+
       require('kanagawa').setup {
         transparent = true,
         colors = {
@@ -960,9 +1087,14 @@ require('lazy').setup({
             TelescopeResultsBorder = { fg = theme.ui.bg_m1, bg = theme.ui.bg_m1 },
             TelescopePreviewNormal = { bg = theme.ui.bg_dim },
             TelescopePreviewBorder = { bg = theme.ui.bg_dim, fg = theme.ui.bg_dim },
+            Pmenu = { fg = theme.ui.shade0, bg = theme.ui.bg_p1 },
+            PmenuSel = { fg = "NONE", bg = theme.ui.bg_p2 },
+            PmenuSbar = { bg = theme.ui.bg_m1 },
+            PmenuThumb = { bg = theme.ui.bg_p2 },
           }
         end,
       }
+
       vim.cmd.colorscheme 'kanagawa-dragon'
 
       -- You can configure highlights by doing something like:
@@ -1043,6 +1175,24 @@ require('lazy').setup({
       --    - Incremental selection: Included, see `:help nvim-treesitter-incremental-selection-mod`
       --    - Show your current context: https://github.com/nvim-treesitter/nvim-treesitter-context
       --    - Treesitter + textobjects: https://github.com/nvim-treesitter/nvim-treesitter-textobjects
+    end,
+  },
+  {
+    'nvim-treesitter/nvim-treesitter-context',
+    config = function()
+      require('treesitter-context').setup({
+        enable = true,
+        multiwindow = false,
+        max_lines = 2,
+        min_window_height = 0,
+        line_numbers = true,
+        multiline_threshold = 20,
+        trim_scope = 'outer',
+        mode = 'cursor',
+        separator = nil,
+        zindex = 20,
+        on_attach = nil,
+      })
     end,
   },
 
