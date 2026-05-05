@@ -7,6 +7,21 @@ A simple personal Neovim configuration built on top of [lazy.nvim](https://githu
 > [!NOTE]
 > Requires [Neovim](https://neovim.io/) >= 0.9 and `git`.
 
+## Dependencies
+
+**Required:**
+
+- `git`
+- `gcc` (or any C compiler)
+- `cargo` — [install via rustup](https://rustup.rs)
+- `unzip`
+
+**Tools (install via Homebrew):**
+
+```sh
+brew install tree-sitter fzf yazi ripgrep fd
+```
+
 Back up your existing config if you have one:
 
 ```sh
