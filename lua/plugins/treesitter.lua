@@ -18,6 +18,7 @@ return {
 			"query",
 			"vim",
 			"vimdoc",
+			"c_sharp",
 			"go",
 			"templ",
 			"javascript",
